@@ -9,8 +9,12 @@
   :components ((:file "package")
                (:file "conditions")
                (:file "theme")
+               (:file "md-inline")
+               (:file "md-block")
+               (:file "md-render")
                (:file "markdown")
                (:file "stream")
+               (:file "diff-read")
                (:file "diff"))
   :in-order-to ((test-op (test-op "tui-markdown/tests"))))
 

@@ -80,8 +80,8 @@ Inlines: string  (:emph inlines) (:strong inlines) (:strike inlines)
          (:code string) (:link url inlines) (:soft-break) (:hard-break)
 Adjacent strings are merged and empty strings dropped, so results compare
 with EQUAL."
-  (declare (ignore string))
-  (%not-implemented 'parse-markdown))
+  (check-type string string)
+  (values (%parse-document string)))
 
 ;;; ------------------------------------------------------------------
 ;;; Rendering: blocks → lines (lists of W:TEXT-RUNs) at WIDTH cells.
@@ -137,5 +137,8 @@ with EQUAL."
 (see THEME-STYLE); HIGHLIGHT is the code block hook or NIL; SHOW-URLS
 appends \" (url)\" to links whose text differs. → a list of lines, each a
 list of W:TEXT-RUNs. A bad WIDTH or MARKDOWN → TYPE-ERROR."
-  (declare (ignore markdown width theme highlight show-urls))
-  (%not-implemented 'render-markdown))
+  (check-type width (integer 1))
+  (check-type markdown (or string list))
+  (check-type theme list)
+  (let ((blocks (if (stringp markdown) (parse-markdown markdown) markdown)))
+    (%render-blocks blocks (%make-ctx width theme highlight show-urls))))
