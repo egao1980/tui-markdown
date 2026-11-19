@@ -1,0 +1,130 @@
+(in-package #:tui-markdown/tests)
+
+(defun stream-texts (s) (texts (md:markdown-stream-lines s)))
+
+(defun feed-stream (s &rest chunks)
+  (dolist (c chunks s) (md:markdown-stream-append s c)))
+
+(deftest stream-partial-lines-show
+  (let ((s (md:make-markdown-stream :width 20)))
+    (ok (null (md:markdown-stream-lines s)))
+    (ok (= 0 (md:markdown-stream-committed-count s)))
+    (ok (eq s (md:markdown-stream-append s "Hello wor")))
+    (ok (equal '("Hello wor") (stream-texts s)) "the line in progress is shown")
+    (ok (= 0 (md:markdown-stream-committed-count s)))
+    (feed-stream s "ld" (string #\Newline) (string #\Newline) "Next")
+    (ok (equal '("Hello world" "" "Next") (stream-texts s)))
+    (ok (= 0 (md:markdown-stream-committed-count s))
+        "a block followed only by a partial line is still live")
+    (feed-stream s (string #\Newline))
+    (ok (equal '("Hello world" "" "Next") (stream-texts s)))
+    (ok (= 2 (md:markdown-stream-committed-count s))
+        "a block followed by another (on complete lines) is final, with the blank line after it")
+    (ok (string= (format nil "Hello world~%~%Next~%") (md:markdown-stream-source s)))))
+
+(deftest stream-last-block-stays-live
+  (let ((s (feed-stream (md:make-markdown-stream :width 20) (nl "para" ""))))
+    (ok (equal '("para") (stream-texts s)))
+    (ok (= 0 (md:markdown-stream-committed-count s))
+        "the last block is live even after a blank line")
+    (feed-stream s (nl "- a" "- b"))
+    (ok (equal '("para" "" "- a" "- b") (stream-texts s)))
+    (ok (= 2 (md:markdown-stream-committed-count s)))
+    (feed-stream s (nl "" "- c"))
+    (ok (equal '("para" "" "- a" "" "- b" "" "- c") (stream-texts s))
+        "the live list became loose")
+    (ok (= 2 (md:markdown-stream-committed-count s)))))
+
+(deftest stream-completion-uses-complete-lines
+  (let ((s (feed-stream (md:make-markdown-stream :width 20) (nl "para") "#")))
+    (ok (equal '("para" "" "") (stream-texts s)) "a partial \"#\" renders as an empty heading")
+    (ok (= 0 (md:markdown-stream-committed-count s))
+        "but a partial line never completes the block before it")
+    (feed-stream s "tag")
+    (ok (equal '("para #tag") (stream-texts s)))
+    (ok (= 0 (md:markdown-stream-committed-count s)))))
+
+(deftest stream-hides-partial-closing-fence
+  (let ((s (feed-stream (md:make-markdown-stream :width 20) (nl "```py" "x = 1") "``")))
+    (ok (equal '("  x = 1") (stream-texts s)) "a prefix of the closing fence is not shown")
+    (feed-stream s "`")
+    (ok (equal '("  x = 1") (stream-texts s)) "a full fence without its newline closes")
+    (feed-stream s (nl "" "after"))
+    (ok (equal '("  x = 1" "" "after") (stream-texts s)))
+    (ok (= 2 (md:markdown-stream-committed-count s))))
+  (let ((s (feed-stream (md:make-markdown-stream :width 20) (nl "```" "x") "`` y")))
+    (ok (equal '("  x" "  `` y") (stream-texts s)) "other partial lines are code")))
+
+(deftest stream-highlights-completed-blocks-once
+  (let* ((calls 0)
+         (s (md:make-markdown-stream
+             :width 30
+             :highlight (lambda (language lines)
+                          (declare (ignore language))
+                          (incf calls)
+                          (mapcar (lambda (l) (list (w:text-run l :foreground 5))) lines)))))
+    (feed-stream s (nl "```lisp" "(a)" "```" "" "next"))
+    (md:markdown-stream-lines s)
+    (let ((before calls)
+          (first-line (first (md:markdown-stream-lines s))))
+      (ok (equal '(("  ") ("(a)" :fg 5)) (segments first-line)))
+      (feed-stream s " words" (string #\Newline) "more")
+      (md:markdown-stream-lines s)
+      (md:markdown-stream-committed-count s)
+      (ok (= before calls) "a committed code block is not highlighted again")
+      (ok (equal '("  (a)" "" "next words more") (stream-texts s))))))
+
+(deftest stream-committed-prefix-is-stable
+  ;; Feed the corpus one character at a time. At every step the committed
+  ;; lines must be a prefix of the final rendering, and the count never
+  ;; decreases.
+  (dolist (width '(24 50))
+    (let* ((final (md-lines *corpus* width))
+           (final-texts (texts final))
+           (final-segments (mapcar #'segments final))
+           (s (md:make-markdown-stream :width width))
+           (last-count 0)
+           (prefix-ok t)
+           (monotonic t))
+      (loop for ch across *corpus*
+            do (md:markdown-stream-append s (string ch))
+               (let* ((lines (md:markdown-stream-lines s))
+                      (k (md:markdown-stream-committed-count s)))
+                 (when (< k last-count) (setf monotonic nil))
+                 (setf last-count k)
+                 (unless (and (<= k (length lines))
+                              (equal (subseq final-texts 0 k) (texts (subseq lines 0 k)))
+                              (equal (subseq final-segments 0 k) (mapcar #'segments (subseq lines 0 k))))
+                   (setf prefix-ok nil))))
+      (ok prefix-ok (format nil "committed lines are final at width ~D" width))
+      (ok monotonic "the committed count never decreases")
+      (ok (> last-count 20) "most of the corpus is committed before the end")
+      (ok (equal final-texts (stream-texts s)) "the unfinished stream already shows everything")
+      (md:markdown-stream-finish s)
+      (ok (md:markdown-stream-finished-p s))
+      (ok (equal final-texts (stream-texts s)) "finished = RENDER-MARKDOWN of the source")
+      (ok (equal final-segments (mapcar #'segments (md:markdown-stream-lines s))))
+      (ok (= (length final) (md:markdown-stream-committed-count s)) "after FINISH every line is final"))))
+
+(deftest stream-finish-and-width
+  (let ((s (feed-stream (md:make-markdown-stream :width 20) "# Title" (string #\Newline) "body text here")))
+    (ok (equal '("Title" "" "body text here") (stream-texts s)))
+    (setf (md:markdown-stream-width s) 9)
+    (ok (= 9 (md:markdown-stream-width s)))
+    (ok (equal '("Title" "" "body text" "here") (stream-texts s)) "a new width renders everything again")
+    (ok (eq s (md:markdown-stream-finish s)))
+    (ok (eq s (md:markdown-stream-finish s)) "idempotent")
+    (ok (= 4 (md:markdown-stream-committed-count s)))
+    (ok (signals (md:markdown-stream-append s "x") 'md:markdown-stream-finished) "no appends after FINISH")
+    (ok (handler-case (progn (md:markdown-stream-append s "x") nil)
+          (md:tui-markdown-error (c) (eq s (md:markdown-stream-finished-stream c))))
+        "the condition names the stream")
+    (ok (signals (setf (md:markdown-stream-width s) 0) 'type-error)))
+  (ok (signals (md:make-markdown-stream :width 0) 'type-error))
+  (ok (signals (md:markdown-stream-append (md:make-markdown-stream) 42) 'type-error)))
+
+(deftest stream-options-pass-through
+  (let ((s (feed-stream (md:make-markdown-stream :width 40 :show-urls nil
+                                                 :theme (list :link (tp:make-style :foreground 3)))
+                        "[a](u)")))
+    (ok (equal '(("a" :fg 3 :link "u")) (segments (first (md:markdown-stream-lines s)))))))
