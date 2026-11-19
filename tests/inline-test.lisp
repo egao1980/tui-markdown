@@ -1,0 +1,66 @@
+(in-package #:tui-markdown/tests)
+
+(defun pi* (string)
+  "The inlines of STRING as one paragraph."
+  (let ((blocks (md:parse-markdown string)))
+    (assert (and (= 1 (length blocks)) (eq :paragraph (first (first blocks)))))
+    (second (first blocks))))
+
+(deftest inline-emphasis
+  (ok (equal '((:emph ("a"))) (pi* "*a*")))
+  (ok (equal '((:emph ("a"))) (pi* "_a_")))
+  (ok (equal '((:strong ("a"))) (pi* "**a**")))
+  (ok (equal '((:strong ("a"))) (pi* "__a__")))
+  (ok (equal '((:emph ((:strong ("a"))))) (pi* "***a***")))
+  (ok (equal '("a" (:emph ("b")) "c") (pi* "a*b*c")) "intraword *")
+  (ok (equal '("snake_case_word") (pi* "snake_case_word")) "intraword _ is text")
+  (ok (equal '((:strong ("a " (:emph ("b")) " c"))) (pi* "**a *b* c**")))
+  (ok (equal '((:emph ("a " (:strong ("b")) " c"))) (pi* "*a **b** c*")))
+  (ok (equal '("*a") (pi* "*a")) "unmatched")
+  (ok (equal '("a * b *") (pi* "a * b *")) "not flanking")
+  (ok (equal '("*" (:emph ("a"))) (pi* "**a*")) "the extra delimiter stays text")
+  (ok (equal '((:emph ("a")) "*") (pi* "*a**")))
+  (ok (equal '((:strike ("gone"))) (pi* "~~gone~~")))
+  (ok (equal '("~one~") (pi* "~one~")) "single tildes are text")
+  (ok (equal '("a " (:emph ((:strong ("b")))) " c") (pi* "a ***b*** c")) "*** → emph around strong")
+  (ok (equal '((:emph ("foo" (:strong ("bar")) "baz"))) (pi* "*foo**bar**baz*"))
+      "multiple-of-3 rule"))
+
+(deftest inline-code-spans
+  (ok (equal '((:code "x")) (pi* "`x`")))
+  (ok (equal '("a " (:code "b") " c") (pi* "a `b` c")))
+  (ok (equal '((:code "a`b")) (pi* "``a`b``")) "a longer fence holds backticks")
+  (ok (equal '((:code "`x`")) (pi* "`` `x` ``")) "one space stripped each side")
+  (ok (equal '((:code "  ")) (pi* "`  `")) "all spaces: kept")
+  (ok (equal '((:code "a b")) (pi* (format nil "`a~%b`"))) "newlines become spaces")
+  (ok (equal '("`x") (pi* "`x")) "unmatched backtick is text")
+  (ok (equal '((:code "*a*")) (pi* "`*a*`")) "no emphasis inside code"))
+
+(deftest inline-escapes
+  (ok (equal '("*a*") (pi* "\\*a\\*")))
+  (ok (equal '("\\q") (pi* "\\q")) "a backslash before a non-punctuation char stays")
+  (ok (equal '("[x](y)") (pi* "\\[x](y)")))
+  (ok (equal '("a_b") (pi* "a\\_b"))))
+
+(deftest inline-links
+  (ok (equal '((:link "https://a.b" ("text"))) (pi* "[text](https://a.b)")))
+  (ok (equal '((:link "u" ((:emph ("em")) " x"))) (pi* "[*em* x](u)")))
+  (ok (equal '((:link "u" ("t"))) (pi* "[t](u \"title\")")) "title dropped")
+  (ok (equal '((:link "a b" ("t"))) (pi* "[t](<a b>)")) "angle destination")
+  (ok (equal '((:link "f(x)" ("t"))) (pi* "[t](f(x))")) "balanced parens")
+  (ok (equal '((:link "" ("t"))) (pi* "[t]()")))
+  (ok (equal '((:link "u" ("a [b] c"))) (pi* "[a [b] c](u)")) "nested brackets")
+  (ok (equal '("[a]") (pi* "[a]")) "no destination: text (no reference links)")
+  (ok (equal '("[a] (u)") (pi* "[a] (u)")) "a space before ( is not a link")
+  (ok (equal '("[" (:link "u" ("b"))) (pi* "[[b](u)")))
+  (ok (equal '("[a " (:link "v" ("b")) "](u)") (pi* "[a [b](v)](u)")) "no links inside links")
+  (ok (equal '((:link "https://x.y/z" ("https://x.y/z"))) (pi* "<https://x.y/z>")) "autolink")
+  (ok (equal '("<a b>") (pi* "<a b>")) "not an autolink")
+  (ok (equal '("*" (:link "u" ("a*"))) (pi* "*[a*](u)")) "a link is a boundary for emphasis")
+  (ok (equal '("!" (:link "i.png" ("alt"))) (pi* "![alt](i.png)")) "no images: ! stays text"))
+
+(deftest inline-breaks
+  (ok (equal '("a" (:soft-break) "b") (pi* (format nil "a~%b"))))
+  (ok (equal '("a" (:hard-break) "b") (pi* (format nil "a   ~%b"))))
+  (ok (equal '("a" (:soft-break) "b") (pi* (format nil "a ~%b"))) "one space is soft")
+  (ok (equal '((:emph ("a" (:soft-break) "b"))) (pi* (format nil "*a~%b*"))) "emphasis spans lines"))
