@@ -2,7 +2,10 @@
   (:use #:cl)
   (:nicknames #:stack-tui-md)
   (:local-nicknames (#:w #:tui-protocol/widgets) (#:tp #:terminal-protocol)
-                    (#:diff #:diff-protocol))
+                    (#:diff #:diff-protocol) (#:mdp #:markdown-protocol))
+  ;; The parser lives in markdown-protocol; PARSE-MARKDOWN is the same
+  ;; symbol, re-exported so this package's API is unchanged.
+  (:import-from #:markdown-protocol #:parse-markdown)
   (:export
    ;; conditions
    #:tui-markdown-error #:markdown-stream-finished #:markdown-stream-finished-stream

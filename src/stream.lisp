@@ -96,8 +96,10 @@ MARKDOWN-STREAM-FINISH this signals MARKDOWN-STREAM-FINISHED."
 
 (defun %fence-prefix-p (partial fence)
   "True when PARTIAL is 0–3 spaces then fewer than (cdr FENCE) of (car FENCE)."
-  (let* ((ind (%indent partial))
-         (k (%run-length partial ind (length partial) (car fence))))
+  (let* ((ind (or (position #\Space partial :test-not #'char=) (length partial)))
+         (k (- (or (position (car fence) partial :start ind :test-not #'char=)
+                   (length partial))
+               ind)))
     (and (<= ind 3)
          (= (+ ind k) (length partial))
          (< k (cdr fence)))))
@@ -129,7 +131,7 @@ MARKDOWN-STREAM-FINISH this signals MARKDOWN-STREAM-FINISHED."
                (nl (position #\Newline src :from-end t))
                (complete (if finished src (if nl (subseq src 0 (1+ nl)) "")))
                (partial (if nl (subseq src (1+ nl)) src)))
-          (multiple-value-bind (blocks open-fence) (%parse-document complete)
+          (multiple-value-bind (blocks open-fence) (mdp:parse-markdown-document complete)
             (let ((k (if finished (length blocks) (max 0 (1- (length blocks))))))
               (%commit stream blocks k ctx)
               (if finished
@@ -137,7 +139,7 @@ MARKDOWN-STREAM-FINISH this signals MARKDOWN-STREAM-FINISHED."
                   (let* ((visible (if (and open-fence (%fence-prefix-p partial open-fence))
                                       complete
                                       src))
-                         (live (%render-blocks (nthcdr k (values (%parse-document visible))) ctx)))
+                         (live (%render-blocks (nthcdr k (values (mdp:parse-markdown-document visible))) ctx)))
                     (setf memo-lines (append cache-lines live))))
               (setf memo-count (if finished (length memo-lines) (length cache-lines))
                     memo-key key)))))
