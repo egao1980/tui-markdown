@@ -6,14 +6,6 @@
 ;;; renders to each block's lines joined by one empty line: the stream's
 ;;; committed prefix relies on both.
 
-(defun %parse-document (string)
-  "STRING → (values blocks open-fence); OPEN-FENCE is (char . length) when a
-top-level fenced code block runs unclosed to the end."
-  (let ((*open-fence* nil)
-        (*depth* 0))
-    (let ((blocks (values (%parse-blocks (%source-lines string)))))
-      (values blocks *open-fence*))))
-
 (defstruct (%ctx (:constructor %make-ctx (width theme highlight show-urls)))
   width theme highlight show-urls)
 
