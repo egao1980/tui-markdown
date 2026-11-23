@@ -41,6 +41,15 @@
                (" (u)" :faint t))
              (segments (first (md-lines "[a**b**](u)" 40))))))
 
+(deftest render-images
+  ;; Blocks, not source: the AST node is what this renders.
+  (ok (equal '(("see ") ("logo" :fg 4 :underline :single :link "i.png") (" (i.png)" :faint t))
+             (segments (first (md-lines '((:paragraph ("see " (:image "i.png" ("logo"))))) 40))))
+      "an image is a link to its url with the alt as text")
+  (ok (equal '(("i.png" :fg 4 :underline :single :link "i.png"))
+             (segments (first (md-lines '((:paragraph ((:image "i.png" ())))) 40))))
+      "empty alt: the url is the text"))
+
 (deftest render-headings
   (let ((lines (md-lines (nl "# One" "## Two" "### Three" "#### *Four*") 30)))
     (ok (equal '("One" "" "Two" "" "### Three" "" "#### Four") (texts lines))

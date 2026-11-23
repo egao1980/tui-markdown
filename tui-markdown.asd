@@ -1,5 +1,5 @@
 (defsystem "tui-markdown"
-  :version "0.2.0"
+  :version "0.2.1"
   :description "Markdown and diff rendering for tui-protocol: a streaming CommonMark-subset renderer and a unified / side-by-side diff renderer, both emitting styled text runs"
   :author "egao1980"
   :license "MIT"
