@@ -18,7 +18,8 @@
 ;;;    :strong, :strike, :code (no backticks shown). A link's text gets
 ;;;    :link plus (:hyperlink url); with :SHOW-URLS (default T) and a text
 ;;;    different from the url, " (url)" follows in the enclosing style
-;;;    with :link-url overlaid.
+;;;    with :link-url overlaid. An image renders as a link to its url
+;;;    whose text is the alt text, or the url when the alt is empty.
 ;;;  - Heading: base :heading-1 (level 1) or :heading; levels 3–6 start
 ;;;    with "### " (level × #, then a space) in the base style; wrapped.
 ;;;  - Code block: each line through the highlight hook or, when the hook

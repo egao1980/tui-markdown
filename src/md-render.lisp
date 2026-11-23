@@ -32,7 +32,7 @@
                      (ecase (first x)
                        ((:emph :strong :strike) (walk (second x)))
                        (:code (write-string (second x) out))
-                       (:link (walk (third x)))
+                       ((:link :image) (walk (third x)))
                        (:soft-break (write-char #\Space out))
                        (:hard-break (write-char #\Newline out)))))))
       (walk inlines))))
@@ -50,6 +50,9 @@
                     (:code (list (%run (second x) (overlay-style style (%ts :code ctx)))))
                     (:soft-break (list (%run " " style)))
                     (:hard-break (list (%run (string #\Newline) style)))
+                    (:image
+                     (destructuring-bind (url alt) (rest x)
+                       (%inline-runs (list (list :link url (or alt (list url)))) style ctx)))
                     (:link
                      (destructuring-bind (url inner) (rest x)
                        (let ((link-style (overlay-style (overlay-style style (%ts :link ctx))
